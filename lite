@@ -1,0 +1,234 @@
+#!/usr/bin/env python
+
+import sys
+import os
+import shutil
+import subprocess
+import platform
+import string
+
+
+DEFAULT_OPS_FILES = [
+    "local-dns.yml",
+    "virtualbox/cpi.yml",
+    "virtualbox/outbound-network.yml",
+    "bosh-lite.yml",
+    "bosh-lite-runc.yml",
+    "jumpbox-user.yml",
+]
+USAGE = """\
+usage: lite create env-name
+       lite delete env-name
+       lite set-routes env-name\
+"""
+BAD_ENV_NAME_CHARS = """ !@#$%^&*()_+-={}|[]\:";'<>?,/~`"""
+
+
+def create_env(env_name):
+    print "creating env:", env_name
+    print "on network: 192.168.%d.0/24" % class_c(env_name)
+    create_deployment_dir(env_name)
+    write_ops(env_name, DEFAULT_OPS_FILES)
+    code = subprocess.call([
+        "bosh",
+        "create-env",
+        "~/workspace/bosh-deployment/bosh.yml",
+        "--state", dir_name(env_name) + "/state.json",
+        "--vars-store", dir_name(env_name) + "/creds.yml",
+        "-v", "director_name='Bosh Lite Director %s'" % env_name,
+        "-v", "internal_cidr=192.168.%d.0/24" % class_c(env_name),
+        "-v", "internal_gw=192.168.%d.1" % class_c(env_name),
+        "-v", "internal_ip=192.168.%d.6" % class_c(env_name),
+        "-v", "outbound_network_name=NatNetwork",
+    ] + ops_args(DEFAULT_OPS_FILES), stdout=sys.stdout, stderr=sys.stderr)
+    if code != 0:
+        print "encountered error with creating env"
+        delete_deployment_dir(env_name)
+        sys.exit(code)
+
+    ca_cert = subprocess.check_output([
+        "bosh",
+        "int",
+        dir_name(env_name) + "/creds.yml",
+        "--path", "/director_ssl/ca",
+    ])
+    password = subprocess.check_output([
+        "bosh",
+        "int",
+        dir_name(env_name) + "/creds.yml",
+        "--path", "/admin_password",
+    ])
+    subprocess.call([
+        "bosh",
+        "-e", "192.168.%d.6" % class_c(env_name),
+        "--ca-cert", ca_cert,
+        "--client", "admin",
+        "--client-secret", password,
+        "alias-env",
+        env_name,
+    ], stdout=sys.stdout, stderr=sys.stderr)
+    insert_secrets(env_name, "admin", password)
+    subprocess.call([
+        "bosh",
+        "-n",
+        "-e", env_name,
+        "upload-stemcell",
+        "https://bosh.io/d/stemcells/bosh-warden-boshlite-ubuntu-trusty-go_agent",
+    ], stdout=sys.stdout, stderr=sys.stderr)
+    subprocess.call([
+        "bosh",
+        "-n",
+        "-e", env_name,
+        "update-cloud-config",
+        os.path.expanduser("~/workspace/bosh-deployment/warden/cloud-config.yml"),
+    ], stdout=sys.stdout, stderr=sys.stderr)
+
+
+def create_deployment_dir(env_name):
+    if env_exists(env_name):
+        print "env directory already exists:", dir_name(env_name)
+        sys.exit(1)
+    os.makedirs(dir_name(env_name))
+
+
+def env_exists(env_name):
+    return os.path.isdir(dir_name(env_name))
+
+
+def delete_deployment_dir(env_name):
+    shutil.rmtree(dir_name(env_name))
+
+
+def dir_name(env_name):
+    return os.path.expanduser("~/deployments/"+env_name)
+
+
+def write_ops(env_name, ops):
+    with open(dir_name(env_name) + "/ops", "w") as f:
+        for op in ops:
+            f.write(op + "\n")
+
+
+def ops_args(ops):
+    args = []
+    for op in ops:
+        args.append("-o")
+        args.append(os.path.expanduser("~/workspace/bosh-deployment/" + op))
+    return args
+
+
+def class_c(env_name):
+    return hash(env_name) % 204 + 50
+
+
+def insert_secrets(env_name, username, password):
+    with open(os.path.expanduser("~/.bosh/config")) as f:
+        data = f.read()
+    search_line = "  alias: %s\n" % env_name
+    pos = string.find(data, search_line)
+    if pos == -1:
+        print "unable to add secrets to alias-env."
+        return
+    secrets = """
+  username: %s
+  password: %s
+""" % (username, password)
+    with open(os.path.expanduser("~/.bosh/config"), "w") as f:
+        f.write(data[:pos] + secrets + data[pos:])
+
+
+def delete_env(env_name):
+    print "deleting env:", env_name
+    ensure_env_exists(env_name)
+    ops = read_ops(env_name)
+    code = subprocess.call([
+        "bosh",
+        "delete-env",
+        "~/workspace/bosh-deployment/bosh.yml",
+        "--state", dir_name(env_name) + "/state.json",
+        "--vars-store", dir_name(env_name) + "/creds.yml",
+        "-v", "director_name='Bosh Lite Director %s'" % env_name,
+        "-v", "internal_cidr=192.168.%d.0/24" % class_c(env_name),
+        "-v", "internal_gw=192.168.%d.1" % class_c(env_name),
+        "-v", "internal_ip=192.168.%d.6" % class_c(env_name),
+        "-v", "outbound_network_name=NatNetwork",
+    ] + ops_args(ops), stdout=sys.stdout, stderr=sys.stderr)
+    if code != 0:
+        print "encountered error with deleting env"
+        sys.exit(code)
+    delete_deployment_dir(env_name)
+
+
+def ensure_env_exists(env_name):
+    if not env_exists(env_name):
+        print "env does not exist"
+        sys.exit(1)
+
+
+def read_ops(env_name):
+    with open(dir_name(env_name) + "/ops") as f:
+        return [l.strip() for l in f.readlines()]
+
+
+def set_routes(env_name):
+    if platform.system() == "Linux":
+        subprocess.call([
+            "sudo",
+            "route",
+            "add",
+            "-net",
+            "10.244.0.0/16",
+            "gw",
+            "192.168.%d.6" % class_c(env_name),
+        ])
+    elif platform.system() == "Windows":
+        subprocess.call([
+            "route",
+            "add",
+            "10.244.0.0/16",
+            "192.168.%d.6" % class_c(env_name),
+        ])
+    elif platform.system() == "Darwin":
+        subprocess.call([
+            "sudo",
+            "route",
+            "add",
+            "-net",
+            "10.244.0.0/16",
+            "192.168.%d.6" % class_c(env_name),
+        ])
+    else:
+        print "unable to detect platform"
+        sys.exit(1)
+
+
+def main():
+    action, env_name = parse_args()
+    if action == "create":
+        create_env(env_name)
+    elif action == "delete":
+        delete_env(env_name)
+    elif action == "set-routes":
+        set_routes(env_name)
+    else:
+        print USAGE
+        sys.exit(1)
+
+
+def parse_args():
+    if len(sys.argv) != 3:
+        print USAGE
+        sys.exit(1)
+    action, env_name = sys.argv[1], sys.argv[2]
+    if action not in ["create", "delete", "set-routes"]:
+        print USAGE
+        sys.exit(1)
+    for c in BAD_ENV_NAME_CHARS:
+        if c in env_name:
+            print "invalid character name in env name:", c
+            sys.exit(1)
+    return action, env_name
+
+
+if __name__ == "__main__":
+    main()
