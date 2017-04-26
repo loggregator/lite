@@ -5,7 +5,7 @@ Creating and deleting bosh directors using
 is convenient, but requires long commands with many arguments.
 
 Using `lite` retains the convenience of `bosh-deployment` without the
-tediosuness.
+long commands.
 
 ## Installation
 
