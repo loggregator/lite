@@ -10,7 +10,7 @@ long commands.
 ## Prerequisites
 
 - Python 2.7 (this is installed by default on most machines)
-- `git clone git@github.com/bosh-deployment ~/workspace/bosh-deployment`
+- `git clone git@github.com:cloudfoundry/bosh-deployment ~/workspace/bosh-deployment`
 - VirtualBox v5.1 or higher
 
 ## Installation
