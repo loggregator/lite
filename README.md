@@ -1,4 +1,4 @@
-# lite.py
+# lite
 
 Creating and deleting bosh directors using
 [bosh-deployment](https://github.com/cloudfoundry/bosh-deployment)
