@@ -12,6 +12,7 @@ long commands.
 - Python 2.7 (this is installed by default on most machines)
 - `git clone git@github.com:cloudfoundry/bosh-deployment ~/workspace/bosh-deployment`
 - VirtualBox v5.1 or higher
+- The new [bosh cli](https://github.com/cloudfoundry/bosh-cli)
 
 ## Installation
 
