@@ -23,6 +23,7 @@ USAGE = """\
 usage: lite create env-name
        lite delete env-name
        lite set-routes env-name
+       lite unset-routes env-name
        lite tunnel env-name deployment instance_group tunnel
        lite ssh-command env-name deployment instance_group cmd\
 
@@ -373,6 +374,8 @@ def main():
         delete_env(env_name, args)
     elif action == "set-routes":
         set_routes(env_name, args)
+    elif action == "unset-routes":
+        unset_routes(env_name)
     elif action == "tunnel":
         tunnel(env_name, args)
     elif action == "ssh-command":
@@ -387,7 +390,7 @@ def parse_action():
         eprint(USAGE)
         sys.exit(1)
     action, env_name = sys.argv[1], sys.argv[2]
-    if action not in ["create", "delete", "set-routes", "tunnel", "ssh-command"]:
+    if action not in ["create", "delete", "set-routes", "unset-routes", "tunnel", "ssh-command"]:
         eprint(USAGE)
         sys.exit(1)
     for c in BAD_ENV_NAME_CHARS:
