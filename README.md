@@ -27,6 +27,9 @@ lite create my-cool-env
 # if you need to route *.bosh-lite.com ips to your env do
 lite set-routes my-cool-env
 
+# to remove routes for an env
+lite unset-routes my-cool-env
+
 # to delete an env
 lite delete my-cool-env
 
