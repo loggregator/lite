@@ -236,8 +236,8 @@ def unset_routes(env_name):
         subprocess.call([
             "sudo",
             "route",
-            "del",
-            "-net",
+            "-n",
+            "delete",
             "10.244.0.0/16",
             "192.168.%d.6" % class_c(env_name),
         ])
@@ -271,8 +271,8 @@ def set_routes(env_name, args):
         subprocess.call([
             "sudo",
             "route",
+            "-n",
             "add",
-            "-net",
             "10.244.0.0/16",
             "192.168.%d.6" % class_c(env_name),
         ])
