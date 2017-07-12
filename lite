@@ -416,12 +416,18 @@ def proc_status(env_name, args):
             result = result+"\n"+i
         return result
 
+    def label(name, value):
+        return "{}{}{} {}%".format(bcolors.FAIL, name, bcolors.ENDC, value)
+
     for vm, status in statuses.iteritems():
       print("{}{}{}\n".format(bcolors.OKGREEN, vm, bcolors.ENDC))
       for p in parsestatus(join(status)):
-          print("{}{}{} CPU {} Memory {}\n".format(bcolors.HEADER, p.name, bcolors.ENDC, p.cpu, p.mem))
+          name = "{}{}{}".format(bcolors.HEADER, p.name, bcolors.ENDC)
+          cpu = label("CPU", p.cpu)
+          mem = label("MEM", p.mem)
+          print("{} {} {}\n".format(name, cpu, mem))
 
-          
+
 def main():
     # Validate bosh command is present and executable
     if not os.path.isfile(bosh_cmd()) or not os.access(bosh_cmd(), os.X_OK):
