@@ -25,7 +25,8 @@ usage: lite create env-name
        lite set-routes env-name
        lite unset-routes env-name
        lite tunnel env-name deployment instance_group tunnel
-       lite ssh-command env-name deployment instance_group cmd\
+       lite ssh-command env-name deployment instance_group cmd
+       lite proc-status env-name deployment instance_group\
 
 set environment variable 'BOSH_CMD' to set bosh-cli path. Defaults to 'bosh'.
 """
@@ -309,15 +310,7 @@ def tunnel(env_name, args):
     stdout=f,
     ).wait()
 
-def ssh_command(env_name, args):
-    if len(args) != 3:
-        eprint(USAGE)
-        sys.exit(1)
-
-    deployment = args[0]
-    instance_group = args[1]
-    cmd = args[2]
-
+def run_ssh_command(env_name, deployment, instance_group, cmd):
     p = subprocess.Popen([
         bosh_cmd(),
         "--environment",
@@ -349,7 +342,22 @@ def ssh_command(env_name, args):
         if name not in vms:
             vms[name]=[]
 
-        vms[name].append(output)
+        vms[name].append(output.strip())
+    return (vms_out, vms_err)
+
+def ssh_command(env_name, args):
+    if len(args) != 3:
+        eprint(USAGE)
+        sys.exit(1)
+
+    deployment = args[0]
+    instance_group = args[1]
+    cmd = args[2]
+
+    if instance_group == "*":
+        instance_group = ""
+
+    vms_out, vms_err = run_ssh_command(env_name, deployment, instance_group, cmd)
 
     def print_vms(vms, title_color, printer):
       for name, outputs in vms.items():
@@ -360,6 +368,60 @@ def ssh_command(env_name, args):
     print_vms(vms_out, bcolors.OKGREEN, print)
     print_vms(vms_err, bcolors.FAIL, eprint)
 
+def proc_status(env_name, args):
+    if len(args) != 2:
+        eprint(USAGE)
+        sys.exit(1)
+
+    deployment = args[0]
+    instance_group = args[1]
+    
+    if instance_group == "*":
+        instance_group = ""
+
+    class Process:
+        name = ""
+        cpu = ""
+        mem = ""
+    
+    def parsestatus(status):
+        procs = []
+        for procblock in re.split('\nProcess\s+', status):
+            procname = re.findall("'(.+)'", procblock)
+            if len(procname) == 0:
+                continue
+        
+            proc = Process()
+            procs.append(proc)
+            proc.name = procname[0]
+            
+            for line in procblock.split('\n'):
+                cpu = re.findall("\s*cpu percent\s+([0-9]+\.[0-9]+)", line)
+                mem = re.findall("\s*memory percent\s+([0-9]+\.[0-9]+)", line)
+                if len(cpu) != 0:
+                    proc.cpu = cpu[0]
+                    continue
+                
+                if len(mem) != 0:
+                    proc.mem = mem[0]
+                    continue
+        return procs
+
+    cmd = "sudo /var/vcap/bosh/bin/monit status"
+    statuses, _ = run_ssh_command(env_name, deployment, instance_group, cmd)
+
+    def join(l):
+        result = ""
+        for i in l:
+            result = result+"\n"+i
+        return result
+
+    for vm, status in statuses.iteritems():
+      print("{}{}{}\n".format(bcolors.OKGREEN, vm, bcolors.ENDC))
+      for p in parsestatus(join(status)):
+          print("{}{}{} CPU {} Memory {}\n".format(bcolors.HEADER, p.name, bcolors.ENDC, p.cpu, p.mem))
+
+          
 def main():
     # Validate bosh command is present and executable
     if not os.path.isfile(bosh_cmd()) or not os.access(bosh_cmd(), os.X_OK):
@@ -380,6 +442,8 @@ def main():
         tunnel(env_name, args)
     elif action == "ssh-command":
         ssh_command(env_name, args)
+    elif action == "proc-status":
+        proc_status(env_name, args)
     else:
         eprint(USAGE)
         sys.exit(1)
@@ -390,7 +454,7 @@ def parse_action():
         eprint(USAGE)
         sys.exit(1)
     action, env_name = sys.argv[1], sys.argv[2]
-    if action not in ["create", "delete", "set-routes", "unset-routes", "tunnel", "ssh-command"]:
+    if action not in ["create", "delete", "set-routes", "unset-routes", "tunnel", "ssh-command", "proc-status"]:
         eprint(USAGE)
         sys.exit(1)
     for c in BAD_ENV_NAME_CHARS:
