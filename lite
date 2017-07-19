@@ -111,6 +111,7 @@ def create_env(env_name, args):
         "update-cloud-config",
         os.path.expanduser("~/workspace/bosh-deployment/warden/cloud-config.yml"),
     ], stdout=sys.stdout, stderr=sys.stderr)
+    set_routes(env_name, [])
 
 
 def create_deployment_dir(env_name):
