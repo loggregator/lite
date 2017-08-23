@@ -27,14 +27,17 @@ usage: lite create env-name
        lite tunnel env-name deployment instance_group tunnel
        lite ssh-command env-name deployment instance_group cmd
        lite proc-status env-name deployment instance_group
-       lite go-routines env-name deployment instance_group\
+       lite go-routines env-name deployment instance_group
 
-set environment variable 'BOSH_CMD' to set bosh-cli path. Defaults to 'bosh'.
+set environment variable 'BOSH_CMD' to set bosh-cli path. Defaults to
+'/usr/local/bin/bosh'.
 """
 BAD_ENV_NAME_CHARS = """ !@#$%^&*()_+-={}|[]\:";'<>?,/~`"""
 
+
 def bosh_cmd():
-    return "/usr/local/bin/bosh" if "BOSH_CMD" not in os.environ else os.environ["BOSH_CMD"]
+    return os.environ.get("BOSH_CMD", "/usr/local/bin/bosh")
+
 
 class bcolors:
     HEADER = '\033[95m'
@@ -46,8 +49,10 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
+
 
 def create_env(env_name, args):
     if len(args) != 0:
@@ -218,6 +223,7 @@ def log_out(env_name):
         eprint("encountered error with logging out")
         sys.exit(code)
 
+
 def unset_routes(env_name):
     if platform.system() == "Linux":
         subprocess.call([
@@ -248,6 +254,7 @@ def unset_routes(env_name):
     else:
         eprint("unable to detect platform")
         sys.exit(1)
+
 
 def set_routes(env_name, args):
     if len(args) != 0:
@@ -284,6 +291,7 @@ def set_routes(env_name, args):
         eprint("unable to detect platform")
         sys.exit(1)
 
+
 def tunnel(env_name, args):
     if len(args) != 3:
         eprint(USAGE)
@@ -311,6 +319,7 @@ def tunnel(env_name, args):
     ],
     stdout=f,
     ).wait()
+
 
 def run_ssh_command(env_name, deployment, instance_group, cmd):
     p = subprocess.Popen([
@@ -348,6 +357,7 @@ def run_ssh_command(env_name, deployment, instance_group, cmd):
         vms[name].append(output.strip())
     return (vms_out, vms_err)
 
+
 def ssh_command(env_name, args):
     if len(args) != 3:
         eprint(USAGE)
@@ -370,6 +380,7 @@ def ssh_command(env_name, args):
 
     print_vms(vms_out, bcolors.OKGREEN, print)
     print_vms(vms_err, bcolors.FAIL, eprint)
+
 
 def proc_status(env_name, deployment, instance_group):
     class Process:
@@ -422,6 +433,7 @@ def proc_status(env_name, deployment, instance_group):
 
     return result
 
+
 def print_proc_status(env_name, args):
     if len(args) != 2:
         eprint(USAGE)
@@ -444,6 +456,7 @@ def print_proc_status(env_name, args):
           mem = label("MEM", p.mem)
           print("{} {} {}\n".format(name, cpu, mem))
 
+
 def listening_ports(env_name, deployment, instance_group, pid):
     cmd = "sudo lsof -p {} | grep LISTEN".format(pid)
     out, _ = run_ssh_command(env_name, deployment, instance_group, cmd)
@@ -458,6 +471,7 @@ def listening_ports(env_name, deployment, instance_group, pid):
 
     return results
 
+
 def parse_go_routines(env_name, deployment, instance_group, port):
     cmd = "curl localhost:{}/debug/pprof/".format(port)
     out, _ = run_ssh_command(env_name, deployment, instance_group, cmd)
@@ -469,6 +483,7 @@ def parse_go_routines(env_name, deployment, instance_group, port):
                 return int(goroutines[0])
 
     return None
+
 
 def go_routines(env_name, args):
     if len(args) != 2:
